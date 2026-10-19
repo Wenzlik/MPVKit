@@ -17,12 +17,10 @@ do {
     try BuildHarfbuzz().buildALL()
     try BuildASS().buildALL()
 
-    // libsmbclient
-    try BuildSmbclient().buildALL()
+    // No libsmbclient (an FFmpeg input only under enable-gpl) and no libbluray
+    // (libmpv's): neither reaches this non-GPL FFmpeg's configure line, which
+    // stays upstream 1.0.0's plus the eac3 encoder and yadif_videotoolbox.
 
-    // libbluray
-    try BuildBluray().buildALL()
-    
     // ffmpeg
     try BuildUavs3d().buildALL()
     try BuildDovi().buildALL()
@@ -33,10 +31,7 @@ do {
     try BuildDav1d().buildALL()
     try BuildFFMPEG().buildALL()
 
-    // mpv
-    try BuildUchardet().buildALL()
-    try BuildLuaJIT().buildALL()
-    try BuildMPV().buildALL()
+    // FFmpeg only: libmpv, uchardet and luajit stay upstream's 1.0.0 binaries.
 } catch {
     print(error.localizedDescription)
     exit(1)
@@ -452,6 +447,13 @@ private class BuildFFMPEG: BaseBuild {
     override func beforeBuild() throws {
         try super.beforeBuild()
 
+        // Name the build. av_version_info() is how a host tells this FFmpeg
+        // from stock MPVKit's (PrismCore's FFmpegBuild.versionInfo); without
+        // a VERSION file it would read plain "n8.1.2" like upstream's.
+        try "\(library.version)-eac3-vt.1\n".write(
+            to: directoryURL + "VERSION", atomically: true, encoding: .utf8
+        )
+
         if Utility.shell("which nasm") == nil {
             Utility.shell("brew install nasm")
         }
@@ -679,7 +681,7 @@ private class BuildFFMPEG: BaseBuild {
         // ./configure --list-encoders
         "--disable-encoders",
         "--enable-encoder=aac", "--enable-encoder=alac", "--enable-encoder=flac", "--enable-encoder=pcm*",
-        "--enable-encoder=movtext", "--enable-encoder=mpeg4", "--enable-encoder=h264_videotoolbox",
+        "--enable-encoder=eac3", "--enable-encoder=movtext", "--enable-encoder=mpeg4", "--enable-encoder=h264_videotoolbox",
         "--enable-encoder=hevc_videotoolbox", "--enable-encoder=prores", "--enable-encoder=prores_videotoolbox",
         // ./configure --list-protocols
         "--enable-protocols",
@@ -747,7 +749,7 @@ private class BuildFFMPEG: BaseBuild {
         "--enable-filter=transpose", "--enable-filter=trim",
         "--enable-filter=vflip", "--enable-filter=volume",
         "--enable-filter=w3fdif",
-        "--enable-filter=yadif",
+        "--enable-filter=yadif", "--enable-filter=yadif_videotoolbox",
         "--enable-filter=avgblur_vulkan", "--enable-filter=blend_vulkan", "--enable-filter=bwdif_vulkan",
         "--enable-filter=chromaber_vulkan", "--enable-filter=flip_vulkan", "--enable-filter=gblur_vulkan",
         "--enable-filter=hflip_vulkan", "--enable-filter=nlmeans_vulkan", "--enable-filter=overlay_vulkan",

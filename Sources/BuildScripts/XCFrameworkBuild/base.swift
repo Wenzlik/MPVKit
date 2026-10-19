@@ -1335,6 +1335,14 @@ enum Utility {
         if ProcessInfo.processInfo.environment.keys.contains("HOME") {
             environment["HOME"] = ProcessInfo.processInfo.environment["HOME"]
         }
+        // Propagate the active toolchain. The build sanitizes its subprocess
+        // environment, and without this every `xcrun --sdk …` inside meson /
+        // configure resolves against whatever `xcode-select` points at — the
+        // Command Line Tools on this machine, which have no tvOS/xrOS SDK, so
+        // the build dies partway through with a bare "SDK not found".
+        if let developerDir = ProcessInfo.processInfo.environment["DEVELOPER_DIR"] {
+            environment["DEVELOPER_DIR"] = developerDir
+        }
         if !environment.keys.contains("PATH") {
             environment["PATH"] = BaseBuild.defaultPath
         }
