@@ -1,3 +1,12 @@
+> **Wenzlik/MPVKit fork.** Upstream MPVKit 1.0.0 with FFmpeg n8.1.2 rebuilt
+> from the same source and configure line plus `--enable-encoder=eac3` and
+> `--enable-filter=yadif_videotoolbox` (`av_version_info()` = `n8.1.2-eac3-vt.1`),
+> for PrismCore's audio bridge. Only the seven LGPL FFmpeg xcframeworks come from
+> this fork's releases; libmpv and every other binary are upstream's 1.0.0. The
+> package identity stays `mpvkit` so it replaces upstream in a dependency graph.
+> Rebuild: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make build version=1.0.1`
+> from a path without spaces, with the Metal toolchain installed.
+
 # MPVKit
 
 [![mpv](https://img.shields.io/badge/mpv-v0.41.0-blue.svg)](https://github.com/mpv-player/mpv)
