@@ -10,8 +10,11 @@ fetched over the network before the first frame.
 - New private option on the "matroska,webm" demuxer (the demuxer had no
   priv_class before): skip_attachments, bool, default 0, decoding param.
 - 1: an Attachments element met before the first Cluster is stepped over by
-  its size (seek, no read of its payload) as long as it has a known size and
-  ends inside the file; otherwise it is parsed as usual. An Attachments
+  its size as long as it has a known size and ends inside the file;
+  otherwise it is parsed as usual. On a seekable input this is a real seek
+  (short-seek threshold disabled for it, no trailing byte read), so no part
+  of the payload that is not already buffered is read; a non-seekable input
+  reads through it as the stock skip does. An Attachments
   element referenced from the SeekHead is not visited at all.
 - No attachment AVStreams are created (they are appended after the track
   streams, so track stream indices are unchanged); attached pictures
@@ -32,24 +35,42 @@ index 344e610..65ddb20 100644
  } MatroskaDemuxContext;
  
  #define CHILD_OF(parent) { .def = { .n = parent } }
-@@ -1475,6 +1478,16 @@ static int ebml_parse(MatroskaDemuxContext *matroska,
+@@ -1475,6 +1478,34 @@ static int ebml_parse(MatroskaDemuxContext *matroska,
  
          if (!data && length != EBML_UNKNOWN_LENGTH)
              goto skip;
 +
 +        /* skip_attachments: step over a known-size Attachments element that
-+         * ends inside the file without reading it; anything else (unknown
-+         * size, truncated, unknown file size) is parsed as usual. */
++         * ends inside the file without creating streams. On a seekable input
++         * this is one real seek: the short-seek threshold is zeroed for it, so
++         * avio_seek() reuses only bytes already buffered and never reads up to
++         * the target. A non-seekable input can only read through it (stock
++         * skip). Unknown size, truncated, unknown file size: parsed as usual. */
 +        if (syntax->id == MATROSKA_ID_ATTACHMENTS && matroska->skip_attachments &&
 +            length != EBML_UNKNOWN_LENGTH) {
-+            int64_t size = avio_size(pb);
-+            if (size > 0 && pos_alt + length <= size)
-+                goto skip;
++            int64_t size = avio_size(pb), end = pos_alt + length;
++            if (size > 0 && end <= size) {
++                FFIOContext *const ctx = ffiocontext(pb);
++                int threshold = ctx->short_seek_threshold;
++                int (*get)(void *opaque) = ctx->short_seek_get;
++                int64_t ret;
++
++                if (!(pb->seekable & AVIO_SEEKABLE_NORMAL))
++                    goto skip;
++                ctx->short_seek_threshold = 0;
++                ctx->short_seek_get       = NULL;
++                ret = avio_seek(pb, end, SEEK_SET);
++                ctx->short_seek_threshold = threshold;
++                ctx->short_seek_get       = get;
++                if (ret < 0)
++                    return ret;
++                goto level_check;
++            }
 +        }
      }
  
      switch (syntax->type) {
-@@ -1983,6 +1996,10 @@ static void matroska_execute_seekhead(MatroskaDemuxContext *matroska)
+@@ -1983,6 +2014,10 @@ static void matroska_execute_seekhead(MatroskaDemuxContext *matroska)
          if (id == MATROSKA_ID_CUES)
              continue;
  
@@ -60,7 +81,7 @@ index 344e610..65ddb20 100644
          if (matroska_parse_seekhead_entry(matroska, pos) < 0) {
              // mark index as broken
              matroska->cues_parsing_deferred = -1;
-@@ -4874,11 +4891,25 @@ const FFInputFormat ff_webm_dash_manifest_demuxer = {
+@@ -4874,11 +4909,25 @@ const FFInputFormat ff_webm_dash_manifest_demuxer = {
  };
  #endif
  
