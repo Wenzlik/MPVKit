@@ -35,9 +35,10 @@ the trailing number counts rebuilds of the same recipe).
 
 - `0001-matroskadec-skip_attachments.patch` adds a private option
   `skip_attachments` (bool, default 0) to the `matroska,webm` demuxer. With 1
-  the Attachments element (fonts, cover art) is stepped over by its size
-  instead of read, whether it comes before the first Cluster or is referenced
-  from the SeekHead; no attachment streams are created. Attachment streams sit
+  the Attachments element (fonts, cover art) is not read: before the first
+  Cluster it is stepped over by its size with one real seek (on a seekable
+  input; a non-seekable one can only read through it), and when referenced
+  from the SeekHead it is not visited; no attachment streams are created. Attachment streams sit
   after the track streams, so track stream indices do not change. Unknown-size
   or truncated Attachments elements are parsed as usual. With 0 or unset the
   demuxer behaves as stock. Use: `av_dict_set(&opts, "skip_attachments", "1", 0)`
@@ -61,14 +62,19 @@ The build area is `./dist`; xcframeworks land in `dist/release/xcframework`.
 Sources/BuildScripts/verify/verify.sh dist
 ```
 
-It checks every slice's `config.h` and xcframework binary for the eac3 encoder
-and yadif_videotoolbox, then links a small C program against the macOS
+It checks every slice's `config_components.h` for the eac3 encoder and
+yadif_videotoolbox, that the xcframeworks have exactly the expected
+platform/variant/arch slices, and each slice binary for both symbols; then links a small C program against the macOS
 xcframework slice and checks the version stamp, the option (default 0), and,
-on generated MKVs with a 20 MB attachment before the first Cluster and one
-reachable only through the SeekHead: unset/0/1 give identical tracks, packets,
-chapters and seeks, 1 creates no attachment streams and reads far fewer bytes.
+on generated MKVs with a 20 MB or a 16 KiB attachment, before the first
+Cluster or reachable only through the SeekHead: unset/0/1 give identical
+tracks, packets, chapters and seeks; 1 creates no attachment streams, and
+while opening no read starts inside the attachment payload.
 
-**LGPL.** The FFmpeg libraries are LGPL-2.1-or-later. Corresponding source is
+**LGPL.** The recipe passes `--enable-version3` (and no `--enable-gpl`), so
+FFmpeg's configure licenses this build as LGPL version 3 or later
+(LGPL-3.0-or-later); the patch itself is LGPL-2.1-or-later like the file it
+changes. Corresponding source is
 upstream FFmpeg tag `n8.1.3` plus the patches above; the exact configure line
 is `BuildFFMPEG` in `Sources/BuildScripts/XCFrameworkBuild/main.swift`. Ship
 both (or a link to this repository at the release tag) with any binary
