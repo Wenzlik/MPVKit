@@ -33,14 +33,18 @@ done
 
 # 3. Build the check against the macOS xcframework slice; dependencies come
 #    from the FFmpeg pkg-config files of the same build (static libraries).
+#    Some deps (gmp) ship no .pc, so pkg-config emits a bare -lgmp: add -L for
+#    every library directory of this build; MoltenVK/shaderc are C++ (-lc++).
 FWS=""
+LIBDIRS=""
+for d in "$DIST"/*/macos/thin/"$ARCH"/lib; do LIBDIRS="$LIBDIRS -L$d"; done
 for l in Libavformat Libavcodec Libavfilter Libswscale Libswresample Libavutil; do
     FWS="$FWS $(ls -d "$XCF/$l.xcframework"/macos-*/"$l.framework/$l")"
 done
 export PKG_CONFIG_PATH=$(ls -d "$DIST"/*/macos/thin/"$ARCH"/lib/pkgconfig | tr '\n' ':')
 # shellcheck disable=SC2046,SC2086
-clang -O1 -o verify "$HERE/verify.c" -I"$THIN/include" $FWS \
-    $(pkg-config --static --libs libavformat libavfilter) -Wl,-dead_strip
+clang -O1 -o verify "$HERE/verify.c" -I"$THIN/include" $FWS $LIBDIRS \
+    $(pkg-config --static --libs libavformat libavfilter) -lc++ -Wl,-dead_strip
 
 ./verify "$EXPECTED" "$WORK"/linear-big.mkv "$WORK"/linear-small.mkv \
     "$WORK"/seekhead-big.mkv "$WORK"/seekhead-small.mkv
