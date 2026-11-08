@@ -1,16 +1,15 @@
-> **Wenzlik/MPVKit fork.** Upstream MPVKit 1.0.0 with FFmpeg n8.1.2 rebuilt
-> from the same source and configure line plus `--enable-encoder=eac3` and
-> `--enable-filter=yadif_videotoolbox` (`av_version_info()` = `n8.1.2-eac3-vt.1`),
-> for PrismCore's audio bridge. Only the seven LGPL FFmpeg xcframeworks come from
-> this fork's releases; libmpv and every other binary are upstream's 1.0.0. The
-> package identity stays `mpvkit` so it replaces upstream in a dependency graph.
-> Rebuild: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make build version=1.0.1`
-> from a path without spaces, with the Metal toolchain installed.
+> **Wenzlik/MPVKit fork.** Upstream MPVKit 1.0.0 with FFmpeg rebuilt from
+> n8.1.3 on upstream's configure line plus `--enable-encoder=eac3` and
+> `--enable-filter=yadif_videotoolbox` and one source patch (below), for
+> PrismCore. Only the seven LGPL FFmpeg xcframeworks come from this fork's
+> releases; libmpv and every other binary are upstream's 1.0.0. The package
+> identity stays `mpvkit` so it replaces upstream in a dependency graph.
+> See [Fork notes](#fork-notes).
 
 # MPVKit
 
 [![mpv](https://img.shields.io/badge/mpv-v0.41.0-blue.svg)](https://github.com/mpv-player/mpv)
-[![ffmpeg](https://img.shields.io/badge/ffmpeg-n8.1.2-blue.svg)](https://github.com/FFmpeg/FFmpeg)
+[![ffmpeg](https://img.shields.io/badge/ffmpeg-n8.1.3-blue.svg)](https://github.com/FFmpeg/FFmpeg)
 [![license](https://img.shields.io/github/license/mpvkit/MPVKit)](https://github.com/mpvkit/MPVKit/main/LICENSE)
 
 > MPVKit is only suitable for learning `libmpv` and will not be maintained too frequently.
@@ -24,6 +23,56 @@ Forked from [kingslay/FFmpegKit](https://github.com/kingslay/FFmpegKit)
 ## About Metal support
 
 Metal support only a patch version ([#7857](https://github.com/mpv-player/mpv/pull/7857)) and does not officially support it yet. Encountering any issues is not strange. 
+
+## Fork notes
+
+**Build identity.** `av_version_info()` = `n8.1.3-eac3-vt-sa.1`
+(`eac3` encoder, `vt` = yadif_videotoolbox, `sa` = skip_attachments patch;
+the trailing number counts rebuilds of the same recipe).
+
+**Patches carried** (`Sources/BuildScripts/patch/FFmpeg/*.patch`, applied with
+`git apply` onto the `n8.1.3` tag before configure):
+
+- `0001-matroskadec-skip_attachments.patch` adds a private option
+  `skip_attachments` (bool, default 0) to the `matroska,webm` demuxer. With 1
+  the Attachments element (fonts, cover art) is stepped over by its size
+  instead of read, whether it comes before the first Cluster or is referenced
+  from the SeekHead; no attachment streams are created. Attachment streams sit
+  after the track streams, so track stream indices do not change. Unknown-size
+  or truncated Attachments elements are parsed as usual. With 0 or unset the
+  demuxer behaves as stock. Use: `av_dict_set(&opts, "skip_attachments", "1", 0)`
+  for `avformat_open_input`.
+
+**Reproduce the build.** Clone to a path without spaces (FFmpeg's configure
+breaks on them), install the Metal toolchain under the Xcode you build with
+(`xcodebuild -downloadComponent MetalToolchain`, otherwise configure silently
+drops yadif_videotoolbox), then:
+
+```
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make build version=1.0.2
+```
+
+The build area is `./dist`; xcframeworks land in `dist/release/xcframework`.
+
+**Verify** (macOS host, after the build; needs Homebrew `ffmpeg` for fixtures,
+`pkg-config`, `python3`):
+
+```
+Sources/BuildScripts/verify/verify.sh dist
+```
+
+It checks every slice's `config.h` and xcframework binary for the eac3 encoder
+and yadif_videotoolbox, then links a small C program against the macOS
+xcframework slice and checks the version stamp, the option (default 0), and,
+on generated MKVs with a 20 MB attachment before the first Cluster and one
+reachable only through the SeekHead: unset/0/1 give identical tracks, packets,
+chapters and seeks, 1 creates no attachment streams and reads far fewer bytes.
+
+**LGPL.** The FFmpeg libraries are LGPL-2.1-or-later. Corresponding source is
+upstream FFmpeg tag `n8.1.3` plus the patches above; the exact configure line
+is `BuildFFMPEG` in `Sources/BuildScripts/XCFrameworkBuild/main.swift`. Ship
+both (or a link to this repository at the release tag) with any binary
+distribution.
 
 ## Installation
 
