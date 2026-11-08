@@ -1,0 +1,88 @@
+matroskadec: add a skip_attachments demuxer option
+
+Author: Václav Zmrhal (Wenzlik/MPVKit fork), 2026. Against FFmpeg n8.1.3.
+License: LGPL-2.1-or-later, same as libavformat/matroskadec.c.
+
+Purpose: let a player open Matroska/WebM files without reading the
+Attachments element (fonts, cover art), which can be tens of MB and is
+fetched over the network before the first frame.
+
+- New private option on the "matroska,webm" demuxer (the demuxer had no
+  priv_class before): skip_attachments, bool, default 0, decoding param.
+- 1: an Attachments element met before the first Cluster is stepped over by
+  its size (seek, no read of its payload) as long as it has a known size and
+  ends inside the file; otherwise it is parsed as usual. An Attachments
+  element referenced from the SeekHead is not visited at all.
+- No attachment AVStreams are created (they are appended after the track
+  streams, so track stream indices are unchanged); attached pictures
+  (cover art) are attachments too and disappear as well.
+- 0/absent: the added branches are not taken; behaviour is stock.
+
+diff --git a/libavformat/matroskadec.c b/libavformat/matroskadec.c
+index 344e610..65ddb20 100644
+--- a/libavformat/matroskadec.c
++++ b/libavformat/matroskadec.c
+@@ -438,6 +438,9 @@ typedef struct MatroskaDemuxContext {
+ 
+     /* Bandwidth value for WebM DASH Manifest */
+     int bandwidth;
++
++    /* skip_attachments option: do not read the Attachments element */
++    int skip_attachments;
+ } MatroskaDemuxContext;
+ 
+ #define CHILD_OF(parent) { .def = { .n = parent } }
+@@ -1475,6 +1478,16 @@ static int ebml_parse(MatroskaDemuxContext *matroska,
+ 
+         if (!data && length != EBML_UNKNOWN_LENGTH)
+             goto skip;
++
++        /* skip_attachments: step over a known-size Attachments element that
++         * ends inside the file without reading it; anything else (unknown
++         * size, truncated, unknown file size) is parsed as usual. */
++        if (syntax->id == MATROSKA_ID_ATTACHMENTS && matroska->skip_attachments &&
++            length != EBML_UNKNOWN_LENGTH) {
++            int64_t size = avio_size(pb);
++            if (size > 0 && pos_alt + length <= size)
++                goto skip;
++        }
+     }
+ 
+     switch (syntax->type) {
+@@ -1983,6 +1996,10 @@ static void matroska_execute_seekhead(MatroskaDemuxContext *matroska)
+         if (id == MATROSKA_ID_CUES)
+             continue;
+ 
++        // skip_attachments: don't even seek to them.
++        if (id == MATROSKA_ID_ATTACHMENTS && matroska->skip_attachments)
++            continue;
++
+         if (matroska_parse_seekhead_entry(matroska, pos) < 0) {
+             // mark index as broken
+             matroska->cues_parsing_deferred = -1;
+@@ -4874,11 +4891,25 @@ const FFInputFormat ff_webm_dash_manifest_demuxer = {
+ };
+ #endif
+ 
++static const AVOption matroska_options[] = {
++    { "skip_attachments", "do not read attachments (no attachment streams are created)",
++      offsetof(MatroskaDemuxContext, skip_attachments), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, AV_OPT_FLAG_DECODING_PARAM },
++    { NULL },
++};
++
++static const AVClass matroska_class = {
++    .class_name = "matroska,webm demuxer",
++    .item_name  = av_default_item_name,
++    .option     = matroska_options,
++    .version    = LIBAVUTIL_VERSION_INT,
++};
++
+ const FFInputFormat ff_matroska_demuxer = {
+     .p.name         = "matroska,webm",
+     .p.long_name    = NULL_IF_CONFIG_SMALL("Matroska / WebM"),
+     .p.extensions   = "mkv,mk3d,mka,mks,webm",
+     .p.mime_type    = "audio/webm,audio/x-matroska,video/webm,video/x-matroska",
++    .p.priv_class   = &matroska_class,
+     .priv_data_size = sizeof(MatroskaDemuxContext),
+     .flags_internal = FF_INFMT_FLAG_INIT_CLEANUP,
+     .read_probe     = matroska_probe,

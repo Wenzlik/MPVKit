@@ -45,7 +45,7 @@ enum Library: String, CaseIterable {
         case .libmpv:
             return "v0.41.0"
         case .FFmpeg:
-            return "n8.1.2"
+            return "n8.1.3"
         case .openssl:
             return "3.3.5"
         case .gnutls:
@@ -449,8 +449,9 @@ private class BuildFFMPEG: BaseBuild {
 
         // Name the build. av_version_info() is how a host tells this FFmpeg
         // from stock MPVKit's (PrismCore's FFmpegBuild.versionInfo); without
-        // a VERSION file it would read plain "n8.1.2" like upstream's.
-        try "\(library.version)-eac3-vt.1\n".write(
+        // a VERSION file it would read plain "n8.1.3" like upstream's.
+        // "sa" = patch/FFmpeg/0001-matroskadec-skip_attachments.patch.
+        try "\(library.version)-eac3-vt-sa.1\n".write(
             to: directoryURL + "VERSION", atomically: true, encoding: .utf8
         )
 
