@@ -10,19 +10,76 @@
 #include <libavfilter/avfilter.h>
 #include <libavformat/avformat.h>
 #include <libavutil/crc.h>
+#include <libavutil/macros.h>
 #include <libavutil/opt.h>
 
 static int failures;
 #define CHECK(cond, ...) do { if (!(cond)) { failures++; printf("FAIL: " __VA_ARGS__); printf("\n"); } } while (0)
 
-typedef struct { FILE *f; int64_t bytes; } Src;
+#define IO_BUF 4096
+
+// lo/hi: the Attachments payload; while track is set, reads are checked
+// against it: payload_read = attachment bytes read, starts_inside = reads
+// that began inside the payload (a read that began before it can carry at
+// most IO_BUF bytes of it into the buffer; that is data read anyway).
+typedef struct {
+    FILE *f;
+    int64_t bytes, lo, hi, payload_read;
+    int track, starts_inside;
+} Src;
 
 static int src_read(void *opaque, uint8_t *buf, int size)
 {
     Src *s = opaque;
+    int64_t off = ftello(s->f);
     size_t n = fread(buf, 1, size, s->f);
     s->bytes += n;
+    if (s->track && n) {
+        s->payload_read += FFMAX(0, FFMIN(off + (int64_t)n, s->hi) - FFMAX(off, s->lo));
+        s->starts_inside += off >= s->lo && off < s->hi;
+    }
     return n ? (int)n : AVERROR_EOF;
+}
+
+static int64_t vint(const uint8_t *b, int64_t *pos, int keep_marker)
+{
+    int n = 1;
+    while (n < 8 && !(b[*pos] & (0x80 >> (n - 1))))
+        n++;
+    int64_t v = keep_marker ? b[*pos] : b[*pos] & (0xFF >> n);
+    for (int i = 1; i < n; i++)
+        v = v << 8 | b[*pos + i];
+    *pos += n;
+    return v;
+}
+
+// [lo, hi) = payload of the Segment's Attachments element (top-level walk).
+static int attachments_range(const char *path, int64_t *lo, int64_t *hi)
+{
+    FILE *f = fopen(path, "rb");
+    int64_t pos = 0;
+    int in_segment = 0, found = 0;
+
+    while (f && !found && !fseeko(f, pos, SEEK_SET)) {
+        uint8_t b[16] = { 0 };
+        int64_t p = 0, id, size;
+        if (fread(b, 1, sizeof(b), f) < 2)
+            break;
+        id = vint(b, &p, 1);
+        size = vint(b, &p, 0);
+        if (!in_segment && id == 0x18538067) {
+            in_segment = 1;                 // descend into the Segment
+            pos += p;
+        } else if (in_segment && id == 0x1941A469) {
+            *lo = pos + p;
+            *hi = *lo + size;
+            found = 1;
+        } else
+            pos += p + size;
+    }
+    if (f)
+        fclose(f);
+    return found;
 }
 
 static int64_t src_seek(void *opaque, int64_t off, int whence)
@@ -40,6 +97,8 @@ static int64_t src_seek(void *opaque, int64_t off, int whence)
 
 typedef struct {
     int64_t header_bytes;       // bytes read by avformat_open_input
+    int64_t payload_read;       // of those, bytes of the Attachments payload
+    int starts_inside;          // reads that began inside that payload
     int nb_streams, attachments, chapters, tracks;
     uint32_t track_sig;         // codec params of the track streams
     uint32_t packet_sig;        // every packet's stream/pts/data
@@ -54,7 +113,7 @@ static uint32_t crc(uint32_t c, const void *p, size_t n)
 // mode: -1 = option absent, 0/1 = skip_attachments value
 static int probe(const char *path, int mode, Result *r)
 {
-    Src src = { fopen(path, "rb"), 0 };
+    Src src = { .f = fopen(path, "rb") };
     AVFormatContext *fc = avformat_alloc_context();
     AVDictionary *opts = NULL;
     AVPacket *pkt = av_packet_alloc();
@@ -63,15 +122,21 @@ static int probe(const char *path, int mode, Result *r)
     memset(r, 0, sizeof(*r));
     if (!src.f)
         return -1;
-    fc->pb = avio_alloc_context(av_malloc(4096), 4096, 0, &src, src_read, NULL, src_seek);
+    if (!attachments_range(path, &src.lo, &src.hi))
+        return -1;
+    fc->pb = avio_alloc_context(av_malloc(IO_BUF), IO_BUF, 0, &src, src_read, NULL, src_seek);
     if (mode >= 0)
         av_dict_set_int(&opts, "skip_attachments", mode, 0);
+    src.track = 1;
     ret = avformat_open_input(&fc, NULL, av_find_input_format("matroska"), &opts);
+    src.track = 0;
     if (ret < 0)
         return ret;
     CHECK(!av_dict_count(opts), "%s: skip_attachments not consumed by the demuxer", path);
     av_dict_free(&opts);
     r->header_bytes = src.bytes;
+    r->payload_read = src.payload_read;
+    r->starts_inside = src.starts_inside;
 
     if ((ret = avformat_find_stream_info(fc, NULL)) < 0)
         return ret;
@@ -155,10 +220,12 @@ int main(int argc, char **argv)
             continue;
         }
         printf("%s: streams absent/0/1 = %d/%d/%d, attachments %d/%d/%d, "
-               "header bytes read %" PRId64 "/%" PRId64 "/%" PRId64 ", packets %" PRId64 "\n",
+               "header bytes read %" PRId64 "/%" PRId64 "/%" PRId64 ", "
+               "attachment bytes read unset/1 = %" PRId64 "/%" PRId64 ", packets %" PRId64 "\n",
                f, absent.nb_streams, off.nb_streams, on.nb_streams,
                absent.attachments, off.attachments, on.attachments,
-               absent.header_bytes, off.header_bytes, on.header_bytes, absent.packets);
+               absent.header_bytes, off.header_bytes, on.header_bytes,
+               absent.payload_read, on.payload_read, absent.packets);
 
         CHECK(!memcmp(&absent, &off, sizeof(absent)), "%s: skip_attachments=0 differs from absent", f);
         CHECK(absent.attachments > 0, "%s: fixture has no attachment streams", f);
@@ -171,9 +238,14 @@ int main(int argc, char **argv)
         CHECK(on.chapters == absent.chapters, "%s: chapters differ", f);
         CHECK(absent.seek_pts != AV_NOPTS_VALUE && on.seek_pts == absent.seek_pts,
               "%s: seek result differs (%" PRId64 " vs %" PRId64 ")", f, on.seek_pts, absent.seek_pts);
-        // Attachments are >= 20 MB: skipping must save almost all of it.
-        CHECK(absent.header_bytes - on.header_bytes > 19 * 1024 * 1024,
-              "%s: skip_attachments=1 did not avoid reading the attachments", f);
+        // I/O ranges while opening: stock reads the payload (sanity check
+        // of the fixture); with 1 no read may begin inside it, and only the
+        // tail of a buffer filled before it may cover its first bytes.
+        CHECK(absent.payload_read > 0 && absent.starts_inside > 0,
+              "%s: stock open did not read the attachments (fixture?)", f);
+        CHECK(!on.starts_inside && on.payload_read < IO_BUF,
+              "%s: skip_attachments=1 read %" PRId64 " attachment bytes, %d reads inside it",
+              f, on.payload_read, on.starts_inside);
     }
 
     printf(failures ? "verify: %d FAILURE(S)\n" : "verify: OK\n", failures);
