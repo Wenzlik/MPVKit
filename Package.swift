@@ -3,10 +3,12 @@
 import PackageDescription
 
 // Wenzlik/MPVKit: upstream MPVKit 1.0.0 with the seven LGPL FFmpeg
-// xcframeworks rebuilt from the same n8.1.2 source and configure line plus
-// --enable-encoder=eac3 and --enable-filter=yadif_videotoolbox (see
-// Sources/BuildScripts). Every other binary, libmpv included, is upstream's
-// 1.0.0 release; the -GPL variants are upstream's unchanged (no eac3).
+// xcframeworks rebuilt from FFmpeg n8.1.3 + the skip_attachments patch, on the
+// same configure line plus --enable-encoder=eac3 and
+// --enable-filter=yadif_videotoolbox (see Sources/BuildScripts); version stamp
+// n8.1.3-eac3-vt-sa.1. Every other binary is upstream's 1.0.0 release: libmpv
+// stays upstream's 1.0.0 binary (built against n8.1.2; same libav* major
+// versions); the -GPL variants are upstream's unchanged (no eac3).
 let package = Package(
     name: "MPVKit",
     platforms: [.macOS(.v12), .iOS(.v15), .tvOS(.v15), .visionOS(.v1)],
@@ -258,38 +260,38 @@ let package = Package(
 
         .binaryTarget(
             name: "Libavcodec",
-            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.1/Libavcodec.xcframework.zip",
-            checksum: "ea8a6da43679b8aa27889f1cfb2e3db6ff2ed3135d7b4ad93dd9881ec8a79059"
+            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.2/Libavcodec.xcframework.zip",
+            checksum: "0ee1a7a3c6ba97e0ffbfde189114ae8215603dc501f7a35f22d332def8b6adb8"
         ),
         .binaryTarget(
             name: "Libavdevice",
-            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.1/Libavdevice.xcframework.zip",
-            checksum: "af5c428e59ac71f98d2f26e1245d3e4929723ef60519342a72938c7b97ed1c08"
+            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.2/Libavdevice.xcframework.zip",
+            checksum: "7cb2e65445decb64306ce6dcd5b3175b484594adf992c32a9b453a182680398f"
         ),
         .binaryTarget(
             name: "Libavformat",
-            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.1/Libavformat.xcframework.zip",
-            checksum: "f5eaa9e634f3720bb9a6ce045da8786804ee7d5cf179b87c2c97acc6689ffc8c"
+            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.2/Libavformat.xcframework.zip",
+            checksum: "f420441cf4e8b0eaf4ac07d17bcec8f7fa90de0fa83bf7e3221547b8180d10ee"
         ),
         .binaryTarget(
             name: "Libavfilter",
-            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.1/Libavfilter.xcframework.zip",
-            checksum: "35aad7d9cfd02a8ab386a32189003e71b103afa6db0ddd6d763e8c51e11e18fd"
+            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.2/Libavfilter.xcframework.zip",
+            checksum: "01f0b5b019de41b2abd157087bc14d95c2b9d6989ca8865ab19ce0ef503aa717"
         ),
         .binaryTarget(
             name: "Libavutil",
-            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.1/Libavutil.xcframework.zip",
-            checksum: "239e488a76851652ddd8c2f4e2f9ef961e6bcf0d8e74fb02421d55c6b474965a"
+            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.2/Libavutil.xcframework.zip",
+            checksum: "07c2f1871a1dad94dc106f213bc6f3d0471d74af74d1b5f2b89a724c5db91fc0"
         ),
         .binaryTarget(
             name: "Libswresample",
-            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.1/Libswresample.xcframework.zip",
-            checksum: "90f7258e0a9e7a8465883880dab3a12b04336050841990a0731a21401c4e7775"
+            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.2/Libswresample.xcframework.zip",
+            checksum: "a02826ae92ab854cf2166631d721d20f7edee3affd998d7e6a4bbd5b97a5c613"
         ),
         .binaryTarget(
             name: "Libswscale",
-            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.1/Libswscale.xcframework.zip",
-            checksum: "ab99663f6509d7c0987c63dddc3cfd391c91d2bb0dfed20401954b7823dfdfb8"
+            url: "https://github.com/Wenzlik/MPVKit/releases/download/1.0.2/Libswscale.xcframework.zip",
+            checksum: "d0f9205aa338a2cad10649d451ee213a6eba52ce0e55b9cd10eef1649f495e59"
         ),
 
         .binaryTarget(

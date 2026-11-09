@@ -26,6 +26,13 @@ Metal support only a patch version ([#7857](https://github.com/mpv-player/mpv/pu
 
 ## Fork notes
 
+**1.0.2** (vs 1.0.1): FFmpeg n8.1.3 instead of n8.1.2, plus the
+`skip_attachments` matroska option (patch below); version stamp
+`n8.1.3-eac3-vt-sa.1`. The seven LGPL xcframeworks now come from this fork's
+1.0.2 release. libmpv and all other binaries are still upstream 1.0.0 (built
+against n8.1.2; same libav* major versions). Default behaviour is unchanged
+unless `skip_attachments` is set.
+
 **Build identity.** `av_version_info()` = `n8.1.3-eac3-vt-sa.1`
 (`eac3` encoder, `vt` = yadif_videotoolbox, `sa` = skip_attachments patch;
 the trailing number counts rebuilds of the same recipe).
@@ -46,8 +53,9 @@ the trailing number counts rebuilds of the same recipe).
 
 **Reproduce the build.** Clone to a path without spaces (FFmpeg's configure
 breaks on them), install the Metal toolchain under the Xcode you build with
-(`xcodebuild -downloadComponent MetalToolchain`, otherwise configure silently
-drops yadif_videotoolbox), then:
+(`xcodebuild -downloadComponent MetalToolchain`) and check it is installed and
+executable: `xcrun -sdk macosx metal -v` must print a version (otherwise
+configure silently drops yadif_videotoolbox), then:
 
 ```
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer make build version=1.0.2
